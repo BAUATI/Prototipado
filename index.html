@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Flappy Bird + Arduino</title>
+  <style>
+    canvas { background: #87CEEB; display: block; margin: auto; }
+    button { display: block; margin: 20px auto; padding: 10px; }
+  </style>
+</head>
+<body>
+  <button onclick="connectArduino()">Conectar Arduino</button>
+  <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let birdY = 300, velocity = 0, gravity = 0.5, lift = -10;
+    let pipes = [], pipeGap = 150, pipeWidth = 60, pipeSpeed = 2;
+    let score = 0;
+    let connected = false;
+
+    function drawBird() {
+      ctx.beginPath();
+      ctx.arc(100, birdY, 15, 0, Math.PI * 2);
+      ctx.fillStyle = "yellow";
+      ctx.fill();
+      ctx.closePath();
+    }
+
+    function drawPipes() {
+      ctx.fillStyle = "green";
+      pipes.forEach(pipe => {
+        ctx.fillRect(pipe.x, 0, pipeWidth, pipe.top);
+        ctx.fillRect(pipe.x, pipe.top + pipeGap, pipeWidth, canvas.height - pipe.top - pipeGap);
+      });
+    }
+
+    function updateGame() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      velocity += gravity;
+      birdY += velocity;
+
+      // Actualizar tubos
+      pipes.forEach(pipe => pipe.x -= pipeSpeed);
+      if (pipes.length === 0 || pipes[pipes.length - 1].x < 250) {
+        let top = Math.floor(Math.random() * 200) + 50;
+        pipes.push({ x: canvas.width, top: top, passed: false });
+      }
+
+      // Eliminar tubos pasados
+      if (pipes.length && pipes[0].x + pipeWidth < 0) pipes.shift();
+
+      // Verificar colisiones
+      pipes.forEach(pipe => {
+        if (100 > pipe.x && 100 < pipe.x + pipeWidth) {
+          if (birdY < pipe.top || birdY > pipe.top + pipeGap) {
+            gameOver();
+          } else if (!pipe.passed) {
+            score++;
+            pipe.passed = true;
+          }
+        }
+      });
+
+      if (birdY >= canvas.height || birdY <= 0) gameOver();
+
+      drawBird();
+      drawPipes();
+
+      ctx.fillStyle = "white";
+      ctx.font = "24px Arial";
+      ctx.fillText("Score: " + score, 10, 30);
+
+      requestAnimationFrame(updateGame);
+    }
+
+    function gameOver() {
+      alert("Game Over. Score: " + score);
+      location.reload(); // Reinicia el juego
+    }
+
+    function jump() {
+      velocity = lift;
+    }
+
+    // Web Serial API
+    async function connectArduino() {
+      try {
+        const port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 9600 });
+        connected = true;
+        const decoder = new TextDecoderStream();
+        const inputDone = port.readable.pipeTo(decoder.writable);
+        const reader = decoder.readable.getReader();
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value && value.includes("JUMP")) {
+            jump();
+          }
+        }
+      } catch (err) {
+        console.error("Error al conectar:", err);
+      }
+    }
+
+    updateGame();
+  </script>
+</body>
+</html>
